@@ -13,7 +13,7 @@ import com.fc.v2.model.auto.THeriBlRule;
 import com.fc.v2.service.ITHeriBlRuleService;
 
 /**
- * 提单签发判定规则 Service业务层处理（rule-eval 形状）
+ * 提单签发判定规则 Service业务层处理（rule-eval 形状：规则求值）
  *
  * @author fuce
  * @date 2026-09-14
@@ -53,12 +53,23 @@ public class THeriBlRuleServiceImpl implements ITHeriBlRuleService {
         return this.heriBlRuleMapper.selectById(id);
     }
 
+    /**
+     * at 时刻可用规则：未删除 + 启用中（撤下的不算）+ 生效窗口含 at（过期/未生效的不算），
+     * 按优先级降序、ruleCode 降序。老数据窗口列为空按无界处理。
+     */
     @Override
     public List<THeriBlRule> listAvailable(Date at) {
         if (at == null) {
             return new java.util.ArrayList<THeriBlRule>();
         }
-        return this.heriBlRuleMapper.selectList(new QueryWrapper<THeriBlRule>().eq("del_flag", 0));
+        String now = ts(at);
+        List<THeriBlRule> list = this.heriBlRuleMapper.selectList(new QueryWrapper<THeriBlRule>()
+                .eq("del_flag", 0)
+                .eq("status", 0)
+                .and(w -> w.isNull("eff_start").or().le("eff_start", now))
+                .and(w -> w.isNull("eff_end").or().gt("eff_end", now)));
+        list.sort(PRIORITY_THEN_CODE_DESC);
+        return list;
     }
 
     @Override
@@ -66,8 +77,17 @@ public class THeriBlRuleServiceImpl implements ITHeriBlRuleService {
         if (ruleCode == null || ruleCode.trim().isEmpty() || input == null || at == null) {
             return 0;
         }
-        THeriBlRule rule = findRule(ruleCode, at);
-        return levelOf(rule, input);
+        if (input.compareTo(BigDecimal.ZERO) < 0) {
+            return 0;
+        }
+        // 只认 at 时刻生效中的版本：撤下/过期/未生效的一律判 0
+        List<THeriBlRule> avail = listAvailable(at);
+        for (THeriBlRule r : avail) {
+            if (ruleCode.equals(r.getRuleCode())) {
+                return levelOf(r, input);
+            }
+        }
+        return 0;
     }
 
     @Override
@@ -75,8 +95,7 @@ public class THeriBlRuleServiceImpl implements ITHeriBlRuleService {
         if (input == null || at == null) {
             return 0;
         }
-        if (input.compareTo(BigDecimal.ZERO) < 0
-                || input.compareTo(new BigDecimal("100")) > 0) {
+        if (input.compareTo(BigDecimal.ZERO) < 0) {
             return 0;
         }
         List<THeriBlRule> avail = listAvailable(at);
@@ -92,7 +111,24 @@ public class THeriBlRuleServiceImpl implements ITHeriBlRuleService {
             return false;
         }
         THeriBlRule r = this.heriBlRuleMapper.selectById(id);
-        return r != null;
+        if (r == null) {
+            return false;
+        }
+        // 口径与 listAvailable 严格一致：未删除 + 启用中 + 生效窗口含 at；列空视同不在册
+        if (r.getDelFlag() == null || r.getDelFlag().intValue() != 0) {
+            return false;
+        }
+        if (r.getStatus() == null || r.getStatus().intValue() != 0) {
+            return false;
+        }
+        String now = ts(at);
+        if (r.getEffStart() != null && ts(r.getEffStart()).compareTo(now) > 0) {
+            return false;
+        }
+        if (r.getEffEnd() != null && ts(r.getEffEnd()).compareTo(now) <= 0) {
+            return false;
+        }
+        return true;
     }
 
     @Override
@@ -100,22 +136,7 @@ public class THeriBlRuleServiceImpl implements ITHeriBlRuleService {
         if (at == null) {
             return 0;
         }
-        return this.heriBlRuleMapper
-                .selectList(new QueryWrapper<THeriBlRule>().eq("del_flag", 0)).size();
-    }
-
-    private THeriBlRule findRule(String ruleCode, Date at) {
-        List<THeriBlRule> hit = this.heriBlRuleMapper.selectList(new QueryWrapper<THeriBlRule>()
-                .eq("del_flag", 0).eq("rule_code", ruleCode));
-        THeriBlRule newest = null;
-        for (THeriBlRule r : hit) {
-            if (newest == null || r.getEffEnd() == null) {
-                newest = r;
-            } else if (newest.getEffEnd() != null && r.getEffEnd().after(newest.getEffEnd())) {
-                newest = r;
-            }
-        }
-        return newest;
+        return listAvailable(at).size();
     }
 
     /** 阈值解析：档案为主、明细覆盖；两者皆缺返回 null（调用方按不可用处理），精度统一 2 位 */
@@ -134,7 +155,7 @@ public class THeriBlRuleServiceImpl implements ITHeriBlRuleService {
         return r.getTh1Max();
     }
 
-    /** 分档：等于上限取高一档 */
+    /** 分档：档上限为含界（"500 件以内"含 500），超三档上限归第 4 档 */
     private int levelOf(THeriBlRule rule, BigDecimal input) {
         if (rule.getTh1Max() != null && input.compareTo(rule.getTh1Max()) <= 0) {
             return 1;

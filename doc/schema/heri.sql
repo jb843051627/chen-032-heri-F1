@@ -138,7 +138,8 @@ CREATE TABLE IF NOT EXISTS t_heri_job (
   update_by varchar(64) DEFAULT NULL COMMENT '更新者',
   update_time datetime DEFAULT NULL COMMENT '更新时间',
   remark varchar(500) DEFAULT NULL COMMENT '备注',
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_heri_job_no (job_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='提单签发作业';
 
 CREATE TABLE IF NOT EXISTS t_heri_job_row (
@@ -161,8 +162,27 @@ CREATE TABLE IF NOT EXISTS t_heri_job_row (
   update_by varchar(64) DEFAULT NULL COMMENT '更新者',
   update_time datetime DEFAULT NULL COMMENT '更新时间',
   remark varchar(500) DEFAULT NULL COMMENT '备注',
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_heri_job_row (job_no, row_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='签发作业行';
+
+CREATE TABLE IF NOT EXISTS t_heri_job_flow (
+  id bigint NOT NULL COMMENT '主键',
+  job_no varchar(32) NOT NULL COMMENT '作业编号',
+  row_no int DEFAULT NULL COMMENT '行次',
+  bl_no varchar(64) DEFAULT NULL COMMENT '提单号',
+  flow_type int NOT NULL COMMENT '流水类型 1签发费用 2冲账',
+  amount decimal(14,2) DEFAULT NULL COMMENT '金额(冲账为红字负数)',
+  job_qty int DEFAULT NULL COMMENT '数量',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  create_by varchar(64) DEFAULT NULL COMMENT '创建者',
+  create_time datetime DEFAULT NULL COMMENT '创建时间',
+  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_time datetime DEFAULT NULL COMMENT '更新时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_heri_job_flow (job_no, row_no, flow_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='签发作业流水';
 
 CREATE TABLE IF NOT EXISTS t_heri_set_row (
   id bigint NOT NULL COMMENT '主键',
