@@ -58,7 +58,49 @@ public class THeriBlRuleServiceImpl implements ITHeriBlRuleService {
         if (at == null) {
             return new java.util.ArrayList<THeriBlRule>();
         }
-        return this.heriBlRuleMapper.selectList(new QueryWrapper<THeriBlRule>().eq("del_flag", 0));
+        // 时段判断放在 Java 侧走墙钟字符串（见 ts 说明），不把 Date 绑进 SQL
+        List<THeriBlRule> all = this.heriBlRuleMapper.selectList(new QueryWrapper<THeriBlRule>()
+                .eq("del_flag", 0).eq("status", 0));
+        List<THeriBlRule> avail = new java.util.ArrayList<THeriBlRule>();
+        for (THeriBlRule r : all) {
+            if (inEffect(r, at)) {
+                avail.add(r);
+            }
+        }
+        java.util.Collections.sort(avail, PRIORITY_THEN_CODE_DESC);
+        return avail;
+    }
+
+    @Override
+    public THeriBlRule findEffective(String ruleCode, Date at) {
+        if (ruleCode == null || ruleCode.trim().isEmpty() || at == null) {
+            return null;
+        }
+        List<THeriBlRule> hit = this.heriBlRuleMapper.selectList(new QueryWrapper<THeriBlRule>()
+                .eq("del_flag", 0).eq("status", 0).eq("rule_code", ruleCode));
+        THeriBlRule best = null;
+        for (THeriBlRule r : hit) {
+            if (!inEffect(r, at)) {
+                continue;
+            }
+            if (best == null || PRIORITY_THEN_CODE_DESC.compare(r, best) < 0) {
+                best = r;
+            }
+        }
+        return best;
+    }
+
+    /** 生效窗口：[eff_start, eff_end)；起/止任一没写就当那一侧不拦 */
+    private boolean inEffect(THeriBlRule r, Date at) {
+        String now = ts(at);
+        if (r.getEffStart() != null && now.compareTo(ts(r.getEffStart())) < 0) {
+            return false;
+        }
+        if (r.getEffEnd() != null && now.compareTo(ts(r.getEffEnd())) >= 0) {
+            // 截止时刻不含：到点即过期
+            return false;
+        }
+        return true;
     }
 
     @Override
@@ -92,7 +134,11 @@ public class THeriBlRuleServiceImpl implements ITHeriBlRuleService {
             return false;
         }
         THeriBlRule r = this.heriBlRuleMapper.selectById(id);
-        return r != null;
+        // 口径与 findEffective/listAvailable 一致：在册、未撤、在生效窗口内才算可用
+        return r != null
+                && (r.getDelFlag() == null || r.getDelFlag() == 0)
+                && (r.getStatus() == null || r.getStatus() == 0)
+                && inEffect(r, at);
     }
 
     @Override
@@ -100,22 +146,11 @@ public class THeriBlRuleServiceImpl implements ITHeriBlRuleService {
         if (at == null) {
             return 0;
         }
-        return this.heriBlRuleMapper
-                .selectList(new QueryWrapper<THeriBlRule>().eq("del_flag", 0)).size();
+        return listAvailable(at).size();
     }
 
     private THeriBlRule findRule(String ruleCode, Date at) {
-        List<THeriBlRule> hit = this.heriBlRuleMapper.selectList(new QueryWrapper<THeriBlRule>()
-                .eq("del_flag", 0).eq("rule_code", ruleCode));
-        THeriBlRule newest = null;
-        for (THeriBlRule r : hit) {
-            if (newest == null || r.getEffEnd() == null) {
-                newest = r;
-            } else if (newest.getEffEnd() != null && r.getEffEnd().after(newest.getEffEnd())) {
-                newest = r;
-            }
-        }
-        return newest;
+        return findEffective(ruleCode, at);
     }
 
     /** 阈值解析：档案为主、明细覆盖；两者皆缺返回 null（调用方按不可用处理），精度统一 2 位 */

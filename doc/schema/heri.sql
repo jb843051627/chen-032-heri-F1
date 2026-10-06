@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS t_heri_del_rule (
 CREATE TABLE IF NOT EXISTS t_heri_job (
   id bigint NOT NULL COMMENT '主键',
   job_no varchar(32) DEFAULT NULL COMMENT '作业编号',
-  job_name varchar(64) DEFAULT NULL COMMENT '作业名称',
+  job_name varchar(64) DEFAULT NULL COMMENT '作业名称(船名航次)',
   status int DEFAULT NULL COMMENT '作业状态(0草稿1待审2生效中3已生效4部分生效5回滚中6已回滚)',
   total_rows int DEFAULT NULL COMMENT '提交总行数',
   done_rows int DEFAULT NULL COMMENT '生效成功行数',
@@ -122,13 +122,13 @@ CREATE TABLE IF NOT EXISTS t_heri_job (
   eff_start datetime DEFAULT NULL COMMENT '作业生效起始时刻',
   eff_end datetime DEFAULT NULL COMMENT '作业生效截止时刻(不含)',
   version varchar(32) DEFAULT NULL COMMENT '判据版本',
-  row_no int DEFAULT NULL COMMENT '行次',
+  row_no int DEFAULT NULL COMMENT '行次(头行固定0)',
   bl_no varchar(64) DEFAULT NULL COMMENT '提单号',
   amount decimal(14,2) DEFAULT NULL COMMENT '金额',
   job_qty int DEFAULT NULL COMMENT '数量',
   version_status int DEFAULT NULL COMMENT '版本状态(1生效中 0未生效)',
-  writeback_flag int DEFAULT NULL COMMENT '是否已写回(0否1是)',
-  compensate_flag int DEFAULT NULL COMMENT '补偿流水标记(0否1是)',
+  writeback_flag int DEFAULT NULL COMMENT '三处写回掩码(1放货凭据2费用流水4经手留痕 7齐)',
+  compensate_flag int DEFAULT NULL COMMENT '补偿流水标记(掩码，同 writeback_flag)',
   compensated int DEFAULT NULL COMMENT '是否已补偿(0否1是)',
   compensate_cnt int DEFAULT NULL COMMENT '补偿累计次数',
   fail_reason varchar(255) DEFAULT NULL COMMENT '失败原因',
@@ -138,30 +138,33 @@ CREATE TABLE IF NOT EXISTS t_heri_job (
   update_by varchar(64) DEFAULT NULL COMMENT '更新者',
   update_time datetime DEFAULT NULL COMMENT '更新时间',
   remark varchar(500) DEFAULT NULL COMMENT '备注',
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_job_head (job_no, row_no) COMMENT '一个作业号在册上只占一行(头行行次0)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='提单签发作业';
 
 CREATE TABLE IF NOT EXISTS t_heri_job_row (
   id bigint NOT NULL COMMENT '主键',
   job_no varchar(32) DEFAULT NULL COMMENT '作业编号',
-  row_no int DEFAULT NULL COMMENT '行次',
+  row_no int DEFAULT NULL COMMENT '行次(册上排1..N，交单方不填)',
   bl_no varchar(64) DEFAULT NULL COMMENT '提单号',
   amount decimal(14,2) DEFAULT NULL COMMENT '金额',
   job_qty int DEFAULT NULL COMMENT '数量',
   version varchar(32) DEFAULT NULL COMMENT '判据版本',
   version_status int DEFAULT NULL COMMENT '版本状态(1生效中 0未生效)',
-  writeback_flag int DEFAULT NULL COMMENT '是否已写回(0否1是)',
-  compensate_flag int DEFAULT NULL COMMENT '补偿流水标记(0否1是)',
+  writeback_flag int DEFAULT NULL COMMENT '三处写回掩码(1放货凭据2费用流水4经手留痕 7齐)',
+  compensate_flag int DEFAULT NULL COMMENT '补偿流水标记(掩码：已冲回哪几处)',
   compensated int DEFAULT NULL COMMENT '是否已补偿(0否1是)',
+  compensate_cnt int DEFAULT NULL COMMENT '补偿累计次数(退回重试遍数)',
   fail_reason varchar(255) DEFAULT NULL COMMENT '失败原因',
-  status int DEFAULT NULL COMMENT '行状态',
+  status int DEFAULT NULL COMMENT '行状态(0待签1已签2没签成3已退回)',
   del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
   create_by varchar(64) DEFAULT NULL COMMENT '创建者',
   create_time datetime DEFAULT NULL COMMENT '创建时间',
   update_by varchar(64) DEFAULT NULL COMMENT '更新者',
   update_time datetime DEFAULT NULL COMMENT '更新时间',
   remark varchar(500) DEFAULT NULL COMMENT '备注',
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_job_row (job_no, row_no) COMMENT '同作业号行次不重，幂等重交不重复落'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='签发作业行';
 
 CREATE TABLE IF NOT EXISTS t_heri_set_row (

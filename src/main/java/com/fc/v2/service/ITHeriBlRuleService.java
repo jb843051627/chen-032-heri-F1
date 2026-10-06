@@ -17,11 +17,18 @@ public interface ITHeriBlRuleService {
     /** 按主键查询规则 */
     THeriBlRule selectTHeriBlRuleById(Long id);
 
-    /**
-     * 单规则求值：按 ruleCode 在 at 时刻生效的版本判档（1..4）。
+    /** 单规则求值：按 ruleCode 在 at 时刻生效的版本判档（1..4）。
      * 无生效版本 / 输入越界 / 参数缺失一律返回 0。
      */
     int evaluate(String ruleCode, BigDecimal input, Date at);
+
+    /**
+     * 按判据版本(rule_code)定位 at 时刻**仍在生效**的判据：在册(del_flag=0)、
+     * 未撤下(status=0)、已到生效起始时刻且未过截止时刻(截止不含)。
+     * 撤了 / 过期 / 查无一律返回 null——核签前先看判据还在不在的统一口径。
+     * 多个版本同时命中取优先级最高（并列取 ruleCode 最大者）。
+     */
+    THeriBlRule findEffective(String ruleCode, Date at);
 
     /** 多规则求值：at 时刻可用规则中优先级最高者的档位；无可用规则返回 0 */
     int evaluateTop(BigDecimal input, Date at);

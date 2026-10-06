@@ -82,6 +82,11 @@ public class THeriJobRow implements Serializable {
     @ApiModelProperty(value = "是否已补偿(0否1是)")
     private Integer compensated;
 
+    /** 补偿累计次数(退回重试遍数) */
+    @TableField("compensate_cnt")
+    @ApiModelProperty(value = "补偿累计次数")
+    private Integer compensateCnt;
+
     /** 失败原因 */
     @TableField("fail_reason")
     @ApiModelProperty(value = "失败原因")
@@ -210,6 +215,14 @@ public class THeriJobRow implements Serializable {
 
     public void setCompensated(Integer compensated) {
         this.compensated = compensated;
+    }
+
+    public Integer getCompensateCnt() {
+        return compensateCnt;
+    }
+
+    public void setCompensateCnt(Integer compensateCnt) {
+        this.compensateCnt = compensateCnt;
     }
 
     public String getFailReason() {
